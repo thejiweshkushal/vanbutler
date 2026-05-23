@@ -1,0 +1,30 @@
+name: Daily evening trigger (18:42 IST)
+
+on:
+  schedule:
+    # 18:42 Asia/Kolkata = 13:12 UTC (IST is UTC+5:30, no DST)
+    - cron: "12 13 * * *"
+  workflow_dispatch:
+
+jobs:
+  evening-trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run daily evening trigger
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          WHAPI_URL: ${{ secrets.WHAPI_URL }}
+          WHAPI_TOKEN: ${{ secrets.WHAPI_TOKEN }}
+          FOOD_GROUP_ID: ${{ secrets.FOOD_GROUP_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python -m scripts.run_daily_evening_trigger
