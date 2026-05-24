@@ -9,22 +9,16 @@ on:
 jobs:
   evening-trigger:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Run daily evening trigger
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          WHAPI_URL: ${{ secrets.WHAPI_URL }}
-          WHAPI_TOKEN: ${{ secrets.WHAPI_TOKEN }}
-          FOOD_GROUP_ID: ${{ secrets.FOOD_GROUP_ID }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python -m scripts.run_daily_evening_trigger
+      - name: Send POST request to Render
+        run: |
+          curl -fsS -X POST "https://vanbutler.onrender.com/internal/daily-evening-trigger" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -d '{}' \
+            --retry 5 \
+            --retry-delay 15 \
+            --retry-connrefused \
+            --retry-all-errors \
+            --max-time 120

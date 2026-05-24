@@ -358,6 +358,10 @@ Slot options alone (without the evening greeting) remain available for ad hoc us
 The old crontab example in that script (18:52 IST) is superseded by the unified
 evening trigger for production scheduling.
 
+First-batch lunch/dinner options exclude meals already chosen for that slot on today
+and the prior two IST calendar days (``daily_choices``). Breakfast does not use that
+lookback; ``SUGGEST_MORE`` runs only exclude ids already stored in ``daily_options``.
+
 
 Ngrok setup (once per machine, before "ngrok http …")
 -----------------------------------------------------

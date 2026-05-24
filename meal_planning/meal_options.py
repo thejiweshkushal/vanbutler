@@ -4,22 +4,23 @@ from __future__ import annotations
 
 import logging
 import random
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
 from database import get_session
-from meal_planning.dates import tomorrow_calendar_date_in_ist
+from meal_planning.dates import today_calendar_date_in_ist, tomorrow_calendar_date_in_ist
 from messages_service.helpers import send_food_group_message, send_no_viable_meal_options_notice
 from meal_planning.query import (
     fetch_daily_option_first_id,
     fetch_daily_option_meal_ids,
+    fetch_daily_choices_for_dates,
     fetch_meal_ids_for_slot,
     fetch_meals_by_ids,
     insert_daily_options_row,
     update_daily_options_meal_ids,
 )
-from models import assert_valid_meal_slot_values
+from models import assert_valid_meal_slot_values, is_system_meal_id
 
 log = logging.getLogger(__name__)
 
@@ -42,9 +43,25 @@ def format_meal_options_message(payload: dict) -> str:
 
 
 def load_exclude_meal_ids(session: Session, calendar_date: date, slot: str) -> list[int]:
-    """All meal ids already stored on ``daily_options`` for this date+slot (used when sampling new picks)."""
+    """Meal ids to exclude when sampling: ``daily_options`` for date+slot, plus on the first
+    lunch/dinner batch recent ``daily_choices`` for the same slot (today and prior two IST days).
+    """
     assert_valid_meal_slot_values([slot])
-    return fetch_daily_option_meal_ids(session, calendar_date, slot)
+    excluded = fetch_daily_option_meal_ids(session, calendar_date, slot)
+    if excluded or slot not in ("lunch", "dinner"):
+        return excluded
+
+    today = today_calendar_date_in_ist()
+    lookback = [today - timedelta(days=i) for i in range(3)]
+    choices_by_date = fetch_daily_choices_for_dates(session, lookback)
+    seen = set(excluded)
+    for d in lookback:
+        meal_id = choices_by_date.get(d, {}).get(slot)
+        if meal_id is None or is_system_meal_id(meal_id) or meal_id in seen:
+            continue
+        seen.add(meal_id)
+        excluded.append(meal_id)
+    return excluded
 
 
 def _append_meal_ids_for_storage(existing: list[int], new_batch: list[int]) -> list[int]:

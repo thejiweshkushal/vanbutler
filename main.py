@@ -6,7 +6,7 @@ from datetime import date
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 load_dotenv()
@@ -87,6 +87,11 @@ def _persist_webhook_payload_for_inspection(body: object) -> None:
     )
 
 
+@app.get("/")
+async def root():
+    return {"status": "Van is awake and at your service!"}
+
+
 @app.get("/health")
 def health() -> dict:
     out: dict = {"status": "ok"}
@@ -129,6 +134,33 @@ async def internal_send_slot_options(body: SlotOptionsRequest) -> dict:
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+class DailyEveningTriggerRequest(BaseModel):
+    storage_date: date | None = None
+
+
+@app.post("/internal/daily-evening-trigger")
+async def internal_daily_evening_trigger(
+    body: DailyEveningTriggerRequest,
+    authorization: str | None = Header(default=None),
+) -> dict:
+    """Execute the daily evening trigger for meal planning.
+
+    Requires Bearer token matching CRON_SECRET from GitHub Actions.
+    """
+    cron_secret = os.environ.get("CRON_SECRET")
+    if cron_secret:
+        expected_auth_header = f"Bearer {cron_secret}"
+        if authorization != expected_auth_header:
+            raise HTTPException(status_code=401, detail="Unauthorized request.")
+
+    from meal_planning.orchestration import run_daily_evening_trigger
+
+    try:
+        return await run_daily_evening_trigger(storage_date=body.storage_date)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.post("/webhook")
