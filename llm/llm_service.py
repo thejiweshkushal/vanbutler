@@ -51,6 +51,8 @@ _groq_client: AsyncGroq | None = None
 # Sleep before retry 1 and retry 2 respectively.
 # Total attempts per call = 1 + len(_TRANSIENT_RETRY_DELAYS) = 3.
 _TRANSIENT_RETRY_DELAYS: tuple[int, ...] = (30, 60)
+_GEMINI_OVERLOAD_BATCH_RETRY_DELAY_SECONDS = 300
+_GEMINI_OVERLOAD_BATCH_RETRIES = 3
 
 
 def _get_gemini_client() -> genai.Client:
@@ -86,6 +88,17 @@ def _is_transient(exc: BaseException | None, provider: Provider) -> bool:
             ),
         )
     return False
+
+
+def _is_gemini_overload_503(exc: BaseException | None) -> bool:
+    """True when Gemini returns server-side temporary overload (HTTP 503)."""
+    if not isinstance(exc, genai_errors.ServerError):
+        return False
+    code = getattr(exc, "code", None)
+    if code == 503:
+        return True
+    message = str(exc).lower()
+    return "503" in message and "unavailable" in message
 
 
 def _extract_response_metadata(
@@ -309,16 +322,67 @@ async def _call_and_log(
 
 
 async def generate_trivia_greeting(trivia: str, *, attempt: int = 1) -> str:
-    """Call Gemini to produce a warm, witty greeting that weaves in the trivia."""
+    """Generate trivia greeting with Gemini-first strategy and Groq fallback.
+
+    Strategy:
+    1) Gemini call with in-call transient retry (30s, 60s).
+    2) If Gemini still fails due to overload 503, run up to 3 more full Gemini
+       batches, sleeping 5 minutes between batches.
+    3) If all Gemini batches fail, fallback to Groq.
+    """
     prompt = get_trivia_greeting_prompt(trivia)
-    model_name = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+    gemini_model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+    req_meta = {"trivia_chars": len(trivia)}
+
+    # 1 + _GEMINI_OVERLOAD_BATCH_RETRIES total Gemini batches.
+    total_batches = 1 + _GEMINI_OVERLOAD_BATCH_RETRIES
+    last_exc: BaseException | None = None
+    for batch_idx in range(total_batches):
+        if batch_idx > 0:
+            log.warning(
+                "Gemini overload batch retry %d/%d for trivia greeting in %ds",
+                batch_idx,
+                _GEMINI_OVERLOAD_BATCH_RETRIES,
+                _GEMINI_OVERLOAD_BATCH_RETRY_DELAY_SECONDS,
+            )
+            await asyncio.sleep(_GEMINI_OVERLOAD_BATCH_RETRY_DELAY_SECONDS)
+        try:
+            return await _call_and_log(
+                kind="trivia_greeting",
+                model=gemini_model,
+                prompt=prompt,
+                provider="gemini",
+                attempt=attempt + batch_idx,
+                request_metadata={
+                    **req_meta,
+                    "greeting_provider": "gemini",
+                    "gemini_batch_retry": batch_idx,
+                },
+            )
+        except Exception as exc:
+            last_exc = exc
+            if not _is_gemini_overload_503(exc):
+                raise
+
+    assert last_exc is not None
+    groq_model = os.environ.get("GROQ_GREETING_MODEL", os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile"))
+    log.warning(
+        "Gemini greeting unavailable after %d batch(es); falling back to Groq model=%s. Last error=%r",
+        total_batches,
+        groq_model,
+        last_exc,
+    )
     return await _call_and_log(
         kind="trivia_greeting",
-        model=model_name,
+        model=groq_model,
         prompt=prompt,
-        provider="gemini",
-        attempt=attempt,
-        request_metadata={"trivia_chars": len(trivia)},
+        provider="groq",
+        attempt=attempt + total_batches,
+        request_metadata={
+            **req_meta,
+            "greeting_provider": "groq_fallback",
+            "gemini_batches_exhausted": total_batches,
+        },
     )
 
 
