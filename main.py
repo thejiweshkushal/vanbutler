@@ -19,6 +19,16 @@ from messages_service.message_service import extract_text_body, upsert_message_f
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
+
+class _SuppressHealthPing(logging.Filter):
+    """Drop uvicorn access log lines for the root health ping endpoint."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return " GET / " not in record.getMessage()
+
+
+logging.getLogger("uvicorn.access").addFilter(_SuppressHealthPing())
+
 # Full webhook capture (file + stderr/stdout) is OFF by default.
 # Set WEBHOOK_QUIET=0 in .env to re-enable verbose JSON dumps for debugging.
 _WEBHOOK_QUIET = os.environ.get("WEBHOOK_QUIET", "1").lower() in (
@@ -94,7 +104,7 @@ async def root():
 
 @app.get("/health")
 def health() -> dict:
-    out: dict = {"status": "ok"}
+    out: dict = {"status": "Van is awake and at your service!"}
     if os.environ.get("DATABASE_URL"):
         from database import check_connection
 
