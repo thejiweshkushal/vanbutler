@@ -386,6 +386,14 @@ async def generate_trivia_greeting(trivia: str, *, attempt: int = 1) -> str:
     )
 
 
+async def generate_sunday_cook_holiday_message(weekday_str: str) -> str:
+    """Return a fixed cook-holiday assumption message for Sunday (no LLM call)."""
+    cook = os.environ.get("COOK_NICKNAME", "didi")
+    return (
+        f"Since tomorrow is {weekday_str}, I'm assuming {cook} is off. Let me know if otherwise."
+    )
+
+
 async def analyze_conversation_intent_raw(
     conversation_snippet: str, *, attempt: int = 1
 ) -> str:
