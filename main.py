@@ -24,10 +24,8 @@ class _SuppressHealthPing(logging.Filter):
     """Drop uvicorn access log lines for the root health ping endpoint."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        return " GET / " not in record.getMessage()
-
-
-logging.getLogger("uvicorn.access").addFilter(_SuppressHealthPing())
+        msg = record.getMessage()
+        return '"GET / HTTP/' not in msg
 
 # Full webhook capture (file + stderr/stdout) is OFF by default.
 # Set WEBHOOK_QUIET=0 in .env to re-enable verbose JSON dumps for debugging.
@@ -44,6 +42,11 @@ _WEBHOOK_DUMP_PATH = Path(
 )
 
 app = FastAPI()
+
+
+@app.on_event("startup")
+def _suppress_root_health_ping_logs() -> None:
+    logging.getLogger("uvicorn.access").addFilter(_SuppressHealthPing())
 
 
 @app.on_event("startup")
