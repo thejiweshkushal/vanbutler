@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 load_dotenv()
 
 from database import engine, get_session
+from meal_planning.meal_options import DEFAULT_SLOT_OPTION_COUNT
 from messages_service.debounce import arm_or_reset_debounce
 from messages_service.intent.intent_service import process_food_group
 from messages_service.message_service import extract_text_body, upsert_message_from_whapi
@@ -118,7 +119,7 @@ def health() -> dict:
 class SlotOptionsRequest(BaseModel):
     slot: str
     storage_date: date | None = None
-    option_count: int = Field(default=3, ge=1, le=20)
+    option_count: int = Field(default=DEFAULT_SLOT_OPTION_COUNT, ge=1, le=20)
 
 
 @app.post("/internal/send-slot-options")

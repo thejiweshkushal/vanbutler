@@ -145,7 +145,7 @@ async def handle_suggest_more(intent: dict[str, Any], *, storage_date: date) -> 
         log.warning("SUGGEST_MORE_OPTIONS missing resolvable slots: %r", intent)
         return
     for slot in slots:
-        await run_slot_options(slot, storage_date=storage_date, option_count=3)
+        await run_slot_options(slot, storage_date=storage_date)
 
 
 def handle_add_new(session: Session, intent: dict[str, Any]) -> None:

@@ -24,6 +24,8 @@ from models import assert_valid_meal_slot_values, is_system_meal_id
 
 log = logging.getLogger(__name__)
 
+DEFAULT_SLOT_OPTION_COUNT = 4
+
 
 def format_meal_options_message(payload: dict) -> str:
     """Plain-text WhatsApp message: title-cased slot, then ``"N. <name>"`` lines (no LLM)."""
@@ -80,7 +82,7 @@ def generate_meal_ids(
     slot: str,
     *,
     exclude_meal_ids: list[int] | None = None,
-    option_count: int = 3,
+    option_count: int = DEFAULT_SLOT_OPTION_COUNT,
 ) -> list[int]:
     """Random meal ids for ``slot`` from ``meals``, excluding ``exclude_meal_ids``."""
     assert_valid_meal_slot_values([slot])
@@ -147,7 +149,7 @@ async def run_slot_options(
     slot: str,
     *,
     storage_date: date | None = None,
-    option_count: int = 3,
+    option_count: int = DEFAULT_SLOT_OPTION_COUNT,
 ) -> dict:
     """Pick meals, format options (plain text, no LLM), send WhatsApp, upsert ``daily_options``.
 
